@@ -1,0 +1,136 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Lismandy palette: kenkey-husk neutrals, palm-soup maroon accent, palm-leaf green for "paid", harvest gold for "due". */
+@layer base {
+  :root {
+    --background: 20 8% 96%;
+    --foreground: 0 8% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 8% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 8% 11%;
+    --primary: 0 59% 30%;
+    --primary-foreground: 20 30% 98%;
+    --secondary: 15 12% 92%;
+    --secondary-foreground: 0 8% 15%;
+    --muted: 15 12% 93%;
+    --muted-foreground: 0 5% 40%;
+    --accent: 12 30% 92%;
+    --accent-foreground: 0 59% 26%;
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 10 10% 87%;
+    --input: 10 10% 82%;
+    --ring: 0 59% 30%;
+    --radius: 0.375rem;
+    --ok: 152 39% 30%;
+    --warn: 38 73% 40%;
+    --bad: 0 70% 45%;
+    --chart-1: 0 59% 34%;
+    --chart-2: 152 39% 34%;
+    --chart-3: 38 73% 45%;
+    --chart-4: 210 30% 45%;
+    --sidebar: 0 10% 12%;
+    --sidebar-foreground: 15 15% 88%;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --background: 0 6% 8%;
+      --foreground: 15 15% 92%;
+      --card: 0 6% 11%;
+      --card-foreground: 15 15% 92%;
+      --popover: 0 6% 12%;
+      --popover-foreground: 15 15% 92%;
+      --primary: 4 62% 64%;
+      --primary-foreground: 0 20% 10%;
+      --secondary: 0 5% 17%;
+      --secondary-foreground: 15 15% 90%;
+      --muted: 0 5% 16%;
+      --muted-foreground: 10 8% 64%;
+      --accent: 0 20% 18%;
+      --accent-foreground: 4 70% 78%;
+      --destructive: 0 65% 55%;
+      --border: 0 5% 20%;
+      --input: 0 5% 24%;
+      --ring: 4 62% 64%;
+      --ok: 152 40% 55%;
+      --warn: 40 75% 58%;
+      --bad: 0 75% 62%;
+      --chart-1: 4 62% 64%;
+      --chart-2: 152 40% 52%;
+      --chart-3: 40 75% 58%;
+      --chart-4: 210 40% 65%;
+      --sidebar: 0 6% 6%;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --background: 0 6% 8%;
+    --foreground: 15 15% 92%;
+    --card: 0 6% 11%;
+    --card-foreground: 15 15% 92%;
+    --popover: 0 6% 12%;
+    --popover-foreground: 15 15% 92%;
+    --primary: 4 62% 64%;
+    --primary-foreground: 0 20% 10%;
+    --secondary: 0 5% 17%;
+    --secondary-foreground: 15 15% 90%;
+    --muted: 0 5% 16%;
+    --muted-foreground: 10 8% 64%;
+    --accent: 0 20% 18%;
+    --accent-foreground: 4 70% 78%;
+    --destructive: 0 65% 55%;
+    --border: 0 5% 20%;
+    --input: 0 5% 24%;
+    --ring: 4 62% 64%;
+    --ok: 152 40% 55%;
+    --warn: 40 75% 58%;
+    --bad: 0 75% 62%;
+    --chart-1: 4 62% 64%;
+    --chart-2: 152 40% 52%;
+    --chart-3: 40 75% 58%;
+    --chart-4: 210 40% 65%;
+    --sidebar: 0 6% 6%;
+    color-scheme: dark;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-background text-foreground;
+    font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, .font-display { font-family: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif; text-wrap: balance; }
+  .num, .font-mono { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
+  .tabnum { font-variant-numeric: tabular-nums; }
+  .eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: hsl(var(--muted-foreground)); font-weight: 600; }
+  :focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+}
+
+/* grid children may shrink below their content (tables scroll inside their own wrapper) */
+.grid > * { min-width: 0; }
+
+/* data tables */
+.dt { width: 100%; border-collapse: collapse; }
+.dt th { text-align: left; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: hsl(var(--muted-foreground)); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid hsl(var(--border)); white-space: nowrap; background: hsl(var(--card)); position: sticky; top: 0; z-index: 1; }
+.dt td { padding: 9px 10px; border-bottom: 1px solid hsl(var(--border) / .6); vertical-align: middle; }
+.dt tr.clickable:hover td { background: hsl(var(--accent) / .5); cursor: pointer; }
+.dt td.r, .dt th.r { text-align: right; }
+.table-wrap { overflow-x: auto; }
+
+/* printable document surface: always paper-white, whatever the theme */
+.paper { background: #fff; color: #1d1d1d; border-radius: 4px; box-shadow: 0 1px 2px rgb(0 0 0 / .08), 0 8px 30px rgb(0 0 0 / .08); overflow-x: auto; }
+
+@media print {
+  body * { visibility: hidden !important; }
+  .print-area, .print-area * { visibility: visible !important; }
+  .print-area { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none !important; }
+}
