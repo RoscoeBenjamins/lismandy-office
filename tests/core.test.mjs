@@ -183,3 +183,18 @@ t('self-service MFA setup from account page', () => {
   assert.equal(res.recoveryCodes.length, 8);
   console.log(`\n${passed} tests passed (incl. late)`);
 });
+t('IDs are 8-digit numbers per table; migration converts old ids and references', () => {
+  const c = store._t.customers[0], s0 = store._t.suppliers[0], u = store._t.users[0], inv = store._t.invoices[0];
+  assert.match(c.id, /^10\d{6}$/); assert.match(s0.id, /^20\d{6}$/); assert.match(u.id, /^80\d{6}$/); assert.match(inv.id, /^40\d{6}$/);
+  assert.ok(store._t.audit.every(a => /^9\d{7}$/.test(a.id)));
+  // simulate legacy rows
+  store._t.customers.push({ id: 'abc-uuid-1', name: 'Legacy Shop', segment: 'Retail' });
+  store._t.invoices.push({ id: 'uuid-inv', number: 5555, date: '2026-01-01', dueDate: '2026-01-31', customerId: 'abc-uuid-1', customerName: 'Legacy Shop', items: [], subtotal: 1, vatAmount: 0, total: 1, status: 'issued' });
+  const r = api.migrateIds();
+  assert.equal(r.converted, 2);
+  const lc = store._t.customers.find(x => x.name === 'Legacy Shop');
+  assert.match(lc.id, /^10\d{6}$/);
+  assert.equal(store._t.invoices.find(x => x.number === 5555).customerId, lc.id);
+  assert.equal(api.migrateIds().converted, 0);
+  console.log(`\n${passed} tests passed (ids)`);
+});

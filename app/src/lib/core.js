@@ -36,6 +36,9 @@ var LismandyCore = (function () {
   };
   var DEFAULT_SETTINGS = { vatRate: 0.03, nextInvoiceNo: 1001, nextProformaNo: 5001, nextReceiptNo: 9001, paymentTermsDays: 30, proformaValidDays: 14, currency: 'GHS', requireMfa: true, bulkQtyThreshold: 200, mailerUrl: '', mailerSecret: '', emailCcSelf: true };
   var SECRET_SETTINGS = { mailerSecret: 1 };
+  // Record IDs are 8-digit numbers; the first digits tell you the table (e.g. customers 10xxxxxx, suppliers 20xxxxxx).
+  var ID_BASE = { customers: 10000000, suppliers: 20000000, products: 30000000, invoices: 40000000, proformas: 50000000, receipts: 60000000, cashbook: 70000000, users: 80000000, audit: 90000000, emails: 99000000 };
+  var ID_SPAN = { audit: 8999999, emails: 999999 };
 
   // ---------------------------------------------------------------- utils
   function err(msg, code) { var e = new Error(msg); e.code = code || 'BAD_REQUEST'; return e; }
@@ -419,6 +422,20 @@ var LismandyCore = (function () {
   function createApi(store, env) {
     // ------------ table helpers
     function all(t) { return store.all(t); }
+    // Next 8-digit numeric ID for a table: highest existing numeric id + 1 (or the table's base).
+    var idCursor = {};
+    function newId(t) {
+      var base = ID_BASE[t], span = ID_SPAN[t] || 9999999, cur = idCursor[t];
+      if (cur === undefined) {
+        cur = base;
+        var ids = store.maxId ? [store.maxId(t)] : all(t).map(function (r) { return r.id; });
+        ids.forEach(function (x) { var n = Number(x); if (/^\d{8}$/.test(String(x)) && n > cur && n <= base + span) cur = n; });
+      }
+      cur += 1;
+      if (cur > base + span) throw err('ID range for ' + t + ' is full');
+      idCursor[t] = cur;
+      return String(cur);
+    }
     function byId(t, id) { var r = all(t).filter(function (x) { return x.id === id; })[0]; if (!r) throw err('Record not found', 'NOT_FOUND'); return r; }
     function settings() {
       var s = clone(DEFAULT_SETTINGS);
@@ -433,7 +450,7 @@ var LismandyCore = (function () {
     function stamp() { return env.now().toISOString(); }
     function today() { return isoDate(new Date(env.now().getTime() + (env.tzOffsetMinutes || 0) * 60000)); }
     function audit(ctx, action, entity, id, details) {
-      store.insert('audit', { id: env.uuid(), at: stamp(), user: ctx && ctx.user ? ctx.user.email : 'system', action: action, entity: entity || '', entityId: id || '', details: typeof details === 'string' ? details : JSON.stringify(details || '') });
+      store.insert('audit', { id: newId('audit'), at: stamp(), user: ctx && ctx.user ? ctx.user.email : 'system', action: action, entity: entity || '', entityId: id || '', details: typeof details === 'string' ? details : JSON.stringify(details || '') });
     }
     function nextNumber(key, table) {
       var s = settings(), n = num(s[key]);
@@ -526,7 +543,7 @@ var LismandyCore = (function () {
         audit(ctx, 'update', table, ex.id, '#' + ex.number + ' total ' + money(t.total));
         return byId(table, ex.id);
       }
-      row.id = env.uuid(); row.number = nextNumber(isInv ? 'nextInvoiceNo' : 'nextProformaNo', table);
+      row.id = newId(table); row.number = nextNumber(isInv ? 'nextInvoiceNo' : 'nextProformaNo', table);
       row.status = isInv ? 'issued' : 'open'; row.createdBy = ctx.user.email; row.createdAt = stamp(); row.emailedAt = '';
       if (isInv) row.fromProforma = num(d.fromProforma) || ''; else row.convertedInvoice = '';
       store.insert(table, row);
@@ -554,7 +571,7 @@ var LismandyCore = (function () {
         audit(ctx, 'update', 'receipts', ex.id, '#' + ex.number + ' GHS ' + money(amount));
         return byId('receipts', ex.id);
       }
-      row.id = env.uuid(); row.number = nextNumber('nextReceiptNo', 'receipts'); row.status = 'valid'; row.createdBy = ctx.user.email; row.createdAt = stamp(); row.emailedAt = '';
+      row.id = newId('receipts'); row.number = nextNumber('nextReceiptNo', 'receipts'); row.status = 'valid'; row.createdBy = ctx.user.email; row.createdAt = stamp(); row.emailedAt = '';
       store.insert('receipts', row);
       syncCashFromReceipt(ctx, row);
       audit(ctx, 'create', 'receipts', row.id, '#' + row.number + ' ' + cust.name + ' GHS ' + money(amount));
@@ -566,7 +583,7 @@ var LismandyCore = (function () {
       if (r.status === 'void') { if (ex) store.remove('cashbook', ex.id); return; }
       var row = { date: r.date, description: 'Receipt #' + r.number + ' — ' + r.customerName, category: 'Sales receipt', type: 'In', reference: r.mode + (r.reference ? ' ' + r.reference : ''), amountIn: r.amount, amountOut: 0, notes: r.invoiceNumber ? 'Invoice #' + r.invoiceNumber : '', source: 'receipt', sourceId: r.id, updatedAt: stamp() };
       if (ex) store.update('cashbook', ex.id, row);
-      else { row.id = env.uuid(); row.createdBy = ctx.user.email; row.createdAt = stamp(); store.insert('cashbook', row); }
+      else { row.id = newId('cashbook'); row.createdBy = ctx.user.email; row.createdAt = stamp(); store.insert('cashbook', row); }
     }
 
     function dataFor(ctx) {
@@ -621,7 +638,7 @@ var LismandyCore = (function () {
       }
       var intro = str(d.message) || 'Dear ' + (type === 'statement' ? number : 'Customer') + ',\n\nPlease find attached your ' + type + ' from ' + co.name + '.\n\nThank you.';
       var body = '<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;white-space:pre-line">' + esc(intro) + '</div><hr style="border:none;border-top:1px solid #eee;margin:18px 0">' + html;
-      var log = { id: env.uuid(), at: stamp(), user: ctx.user.email, docType: type, docNumber: String(number), to: to.join(', '), subject: subject, status: 'sent', error: '' };
+      var log = { id: newId('emails'), at: stamp(), user: ctx.user.email, docType: type, docNumber: String(number), to: to.join(', '), subject: subject, status: 'sent', error: '' };
       try {
         env.sendMail({ url: s.mailerUrl, secret: s.mailerSecret, to: to.join(','), cc: s.emailCcSelf ? co.email : '', subject: subject, html: body, attachmentHtml: html, attachmentName: name + '.pdf', fromName: co.name, replyTo: co.email });
       } catch (e) {
@@ -651,7 +668,7 @@ var LismandyCore = (function () {
         audit(ctx, 'update', table, d.id, row[key] || ex[key]);
         return byId(table, d.id);
       }
-      row.id = env.uuid(); row.createdAt = stamp();
+      row.id = newId(table); row.createdAt = stamp();
       if (table === 'products' && row.active === undefined) row.active = true;
       store.insert(table, row);
       audit(ctx, 'create', table, row.id, row[key]);
@@ -688,7 +705,7 @@ var LismandyCore = (function () {
         return { user: publicUser(byId('users', d.id)) };
       }
       var pw = tempPassword(env), salt = randomToken(env, 16);
-      var u = { id: env.uuid(), email: email, name: str(d.name) || email, role: role, permissions: perms, passwordHash: hashPassword(env, pw, salt), salt: salt, mustChangePassword: true, mfaEnabled: false, mfaSecret: '', recoveryCodes: [], active: true, failedAttempts: 0, lockedUntil: '', lastLoginAt: '', createdAt: stamp(), updatedAt: stamp() };
+      var u = { id: newId('users'), email: email, name: str(d.name) || email, role: role, permissions: perms, passwordHash: hashPassword(env, pw, salt), salt: salt, mustChangePassword: true, mfaEnabled: false, mfaSecret: '', recoveryCodes: [], active: true, failedAttempts: 0, lockedUntil: '', lastLoginAt: '', createdAt: stamp(), updatedAt: stamp() };
       store.insert('users', u);
       audit(ctx, 'create', 'users', u.id, email + ' role=' + role);
       return { user: publicUser(u), tempPassword: pw };
@@ -812,7 +829,7 @@ var LismandyCore = (function () {
         if (!str(d.description)) throw err('Description is required');
         var row = { date: validDate(d.date || today(), 'Date'), description: str(d.description), category: str(d.category), type: type, reference: str(d.reference), amountIn: type === 'In' ? amt : 0, amountOut: type === 'Out' ? amt : 0, notes: str(d.notes), updatedAt: stamp() };
         if (d.id) { var ex = byId('cashbook', d.id); if (ex.source === 'receipt') throw err('This line comes from a receipt — edit the receipt instead'); store.update('cashbook', d.id, row); audit(ctx, 'update', 'cashbook', d.id, row.description); return byId('cashbook', d.id); }
-        row.id = env.uuid(); row.source = 'manual'; row.sourceId = ''; row.createdBy = ctx.user.email; row.createdAt = stamp();
+        row.id = newId('cashbook'); row.source = 'manual'; row.sourceId = ''; row.createdBy = ctx.user.email; row.createdAt = stamp();
         store.insert('cashbook', row); audit(ctx, 'create', 'cashbook', row.id, row.type + ' ' + money(amt) + ' ' + row.description); return row;
       }
     };
@@ -881,22 +898,45 @@ var LismandyCore = (function () {
       setSetting('company', seedData.company);
       Object.keys(seedData.settings || {}).forEach(function (k) { setSetting(k, seedData.settings[k]); });
       var ts = stamp();
-      (seedData.customers || []).forEach(function (c) { store.insert('customers', Object.assign({ id: env.uuid(), createdAt: ts, updatedAt: ts }, c)); });
-      (seedData.suppliers || []).forEach(function (c) { store.insert('suppliers', Object.assign({ id: env.uuid(), createdAt: ts, updatedAt: ts }, c)); });
-      (seedData.products || []).forEach(function (c) { store.insert('products', Object.assign({ id: env.uuid(), createdAt: ts, updatedAt: ts }, c)); });
+      (seedData.customers || []).forEach(function (c) { store.insert('customers', Object.assign({ id: newId('customers'), createdAt: ts, updatedAt: ts }, c)); });
+      (seedData.suppliers || []).forEach(function (c) { store.insert('suppliers', Object.assign({ id: newId('suppliers'), createdAt: ts, updatedAt: ts }, c)); });
+      (seedData.products || []).forEach(function (c) { store.insert('products', Object.assign({ id: newId('products'), createdAt: ts, updatedAt: ts }, c)); });
       var sys = { user: { email: 'import', name: 'Import' } };
       (seedData.invoices || []).forEach(function (inv) {
         var cust = findCustomer(inv.customer), t = docTotals(inv.items, inv.vat, seedData.settings.vatRate);
-        store.insert('invoices', { id: env.uuid(), number: inv.number, date: inv.date, dueDate: inv.dueDate, customerId: cust ? cust.id : '', customerName: inv.customer, vat: !!inv.vat, vatRate: t.vatRate, items: t.items, subtotal: t.subtotal, vatAmount: t.vatAmount, total: t.total, status: 'issued', notes: inv.notes || '', fromProforma: '', emailedAt: '', createdBy: 'import', createdAt: ts, updatedAt: ts });
+        store.insert('invoices', { id: newId('invoices'), number: inv.number, date: inv.date, dueDate: inv.dueDate, customerId: cust ? cust.id : '', customerName: inv.customer, vat: !!inv.vat, vatRate: t.vatRate, items: t.items, subtotal: t.subtotal, vatAmount: t.vatAmount, total: t.total, status: 'issued', notes: inv.notes || '', fromProforma: '', emailedAt: '', createdBy: 'import', createdAt: ts, updatedAt: ts });
       });
       var pw = tempPassword(env), salt = randomToken(env, 16);
-      store.insert('users', { id: env.uuid(), email: lower(adminEmail), name: adminName || 'Administrator', role: 'admin', permissions: {}, passwordHash: hashPassword(env, pw, salt), salt: salt, mustChangePassword: true, mfaEnabled: false, mfaSecret: '', recoveryCodes: [], active: true, failedAttempts: 0, lockedUntil: '', lastLoginAt: '', createdAt: ts, updatedAt: ts });
+      store.insert('users', { id: newId('users'), email: lower(adminEmail), name: adminName || 'Administrator', role: 'admin', permissions: {}, passwordHash: hashPassword(env, pw, salt), salt: salt, mustChangePassword: true, mfaEnabled: false, mfaSecret: '', recoveryCodes: [], active: true, failedAttempts: 0, lockedUntil: '', lastLoginAt: '', createdAt: ts, updatedAt: ts });
       audit(sys, 'setup', 'system', '', 'Database created from Excel master workbook');
       if (store.flush) store.flush();
       return { adminEmail: lower(adminEmail), tempPassword: pw };
     }
 
-    return { handle: handle, seed: seed, actions: A };
+    // One-off: convert any older long IDs to 8-digit numbers and fix every reference to them.
+    function migrateIds() {
+      var changed = {}, total = 0;
+      ['customers', 'suppliers', 'products', 'invoices', 'proformas', 'receipts', 'cashbook', 'users'].forEach(function (t) {
+        changed[t] = {};
+        all(t).forEach(function (r) { if (!/^\d{8}$/.test(String(r.id))) { var n = newId(t); changed[t][r.id] = n; store.update(t, r.id, { id: n }); total++; } });
+      });
+      ['invoices', 'proformas', 'receipts'].forEach(function (t) {
+        all(t).forEach(function (r) { if (changed.customers[r.customerId]) store.update(t, r.id, { customerId: changed.customers[r.customerId] }); });
+      });
+      all('cashbook').forEach(function (r) { if (r.source === 'receipt' && changed.receipts[r.sourceId]) store.update('cashbook', r.id, { sourceId: changed.receipts[r.sourceId] }); });
+      all('audit').forEach(function (r) {
+        var map = changed[r.entity] || {};
+        var patch = {};
+        if (map[r.entityId]) patch.entityId = map[r.entityId];
+        if (!/^\d{8}$/.test(String(r.id))) patch.id = newId('audit');
+        if (patch.id || patch.entityId) { store.update('audit', r.id, patch); }
+      });
+      all('emails').forEach(function (r) { if (!/^\d{8}$/.test(String(r.id))) store.update('emails', r.id, { id: newId('emails') }); });
+      if (store.flush) store.flush();
+      return { converted: total };
+    }
+
+    return { handle: handle, seed: seed, actions: A, migrateIds: migrateIds };
   }
 
   return {

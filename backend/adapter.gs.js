@@ -74,6 +74,12 @@ function SheetStore_(ss) {
       for (var i = 0; i < rows.length; i++) if (rows[i].id === id) { sheet(t).deleteRow(rows[i]._row); break; }
       delete cache[t];
     },
+    maxId: function (t) {
+      var rows = cache[t];
+      if (!rows) { var sh = sheet(t), n = sh.getLastRow(); if (n < 2) return 0; rows = sh.getRange(2, 1, n - 1, 1).getValues().map(function (r) { return { id: r[0] }; }); }
+      var m = 0; rows.forEach(function (r) { var v = String(r.id); if (/^\d{8}$/.test(v) && Number(v) > m) m = Number(v); });
+      return m;
+    },
     flush: function () { SpreadsheetApp.flush(); },
     discard: function () { cache = {}; }
   };
@@ -155,6 +161,13 @@ function resetAdminPassword() {
   store.update('users', u.id, { passwordHash: gasEnv_.hashIterations + '$' + h, salt: salt, mustChangePassword: true, failedAttempts: 0, lockedUntil: '', mfaEnabled: false, mfaSecret: '', recoveryCodes: [] });
   Logger.log('New temporary admin password: ' + pw + '  (authenticator was also reset — you will scan a new QR code)');
   return pw;
+}
+
+// One-off: turn older long IDs into 8-digit numbers (customers 10xxxxxx, suppliers 20xxxxxx, …). Safe to run more than once.
+function migrateIdsToNumbers() {
+  var res = api_().migrateIds();
+  Logger.log('Converted ' + res.converted + ' records to 8-digit IDs. Everyone needs to sign in again.');
+  return res;
 }
 
 // Nightly copy of the database into LISMANDY DB/Backups (keeps the latest 30).

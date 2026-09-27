@@ -157,7 +157,7 @@ function Settings() {
             <div className="flex items-center gap-2"><Switch id="s-cc" checked={!!s.emailCcSelf} onCheckedChange={(v) => set('emailCcSelf', v)} /><label htmlFor="s-cc" className="text-[13px]">Send a copy of every email to {co.email}</label></div>
             <div className="flex flex-wrap items-end gap-2 pt-1">
               <Field label="Send a test to" className="flex-1 min-w-[200px]"><TextInput id="s-test" type="email" placeholder={co.email} value={testTo} onChange={(e) => setTestTo(e.target.value)} /></Field>
-              <Button variant="outline" onClick={() => call('admin.testMailer', { to: testTo }, { success: 'Test email sent', refresh: false })}>Send test</Button>
+              <Button variant="outline" onClick={async () => { const saved = await call('admin.saveSettings', { settings: s, company: co }, { refresh: false }); if (saved) await call('admin.testMailer', { to: testTo }, { success: 'Settings saved and test email sent' }); }}>Save & send test</Button>
             </div>
             <div className="text-[12px]">Status: {d.settings.mailerConfigured ? <Pill tone="Paid">connected</Pill> : <Pill tone="medium">not connected</Pill>}</div>
           </div>
